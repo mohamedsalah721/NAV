@@ -1,11 +1,14 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   Compass, Anchor, Ship, Waves, MapPin, Navigation, Radio, Satellite,
   Ruler, Save, Settings, Info, Menu, X, Search, Clock, TrendingUp,
   AlertTriangle, CheckCircle2, RotateCw, Copy, Trash2, ChevronDown,
   ChevronRight, ArrowRight, Gauge, LocateFixed, CornerDownRight,
-  Lightbulb, Users, Crosshair
+  Lightbulb, Users, Crosshair, Cloud, Database
 } from "lucide-react";
+import { SANITY_CONFIG, fetchSanityCalculations, saveToSanity, deleteFromSanity } from "./sanity/client";
+
+
 
 /* ============================================================
    CALCULATION UTILITIES  (pure functions, no UI concerns)
@@ -1280,10 +1283,20 @@ function Dashboard({ navigate, history, query, setQuery }) {
   const filtered = CALCULATORS.filter((c) => c.label.toLowerCase().includes(query.toLowerCase()));
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2 text-cyan-500 mb-1"><Anchor size={20} /><span className="text-xs uppercase tracking-widest">Bridge Console</span></div>
-        <h1 className="text-3xl font-bold text-slate-100 tracking-tight">ShipNav</h1>
-        <p className="text-slate-500 text-sm mt-1">Professional Maritime Navigation Calculators</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-cyan-500 mb-1"><Anchor size={20} /><span className="text-xs uppercase tracking-widest">Bridge Console</span></div>
+          <h1 className="text-3xl font-bold text-slate-100 tracking-tight">ShipNav</h1>
+          <p className="text-slate-500 text-sm mt-1">Professional Maritime Navigation Calculators</p>
+        </div>
+        <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-sm">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="text-slate-300 font-medium">Sanity CMS</span>
+          <span className="font-mono text-cyan-400 text-[11px] bg-slate-950 px-2 py-0.5 rounded border border-slate-800">{SANITY_CONFIG.projectId}</span>
+        </div>
       </div>
 
       <div className="relative max-w-md">
@@ -1296,7 +1309,7 @@ function Dashboard({ navigate, history, query, setQuery }) {
         <ReadOut label="Calculators" value={CALCULATORS.length} unit="" accent="cyan" />
         <ReadOut label="Saved Calculations" value={history.length} unit="" accent="amber" />
         <ReadOut label="Recent" value={history.length ? history[0].name : "—"} unit="" />
-        <ReadOut label="Quick Tools" value="4" unit="" accent="emerald" />
+        <ReadOut label="Sanity Sync" value="Active" unit="" accent="emerald" />
       </div>
 
       <div>
@@ -1325,19 +1338,31 @@ function Dashboard({ navigate, history, query, setQuery }) {
 function HistoryPage({ history, onDelete, onClear, onRename, onDuplicate }) {
   return (
     <div className="space-y-5">
-      <CalcHeader title="Saved Calculations" desc="Calculations you save from any calculator appear here for this session." />
+      <CalcHeader title="Saved Calculations" desc="Calculations saved locally and synced with Sanity CMS Cloud." />
+      <div className="flex items-center gap-2 p-3 bg-slate-900/80 border border-slate-800 rounded-lg text-xs">
+        <Database size={15} className="text-cyan-400" />
+        <span className="text-slate-300">Sanity Cloud Backend:</span>
+        <span className="font-mono text-cyan-300">Project {SANITY_CONFIG.projectId} ({SANITY_CONFIG.dataset})</span>
+      </div>
       {history.length === 0 && <Warning level="info">No saved calculations yet. Use the Save button on any calculator.</Warning>}
       <div className="space-y-2">
         {history.map((h) => (
           <div key={h.id} className="flex items-center justify-between bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-3">
             <div>
-              <input defaultValue={h.name} onBlur={(e) => onRename(h.id, e.target.value)}
-                className="bg-transparent text-sm font-medium text-slate-200 outline-none border-b border-transparent focus:border-cyan-600" />
+              <div className="flex items-center gap-2">
+                <input defaultValue={h.name} onBlur={(e) => onRename(h.id, e.target.value)}
+                  className="bg-transparent text-sm font-medium text-slate-200 outline-none border-b border-transparent focus:border-cyan-600" />
+                {h.syncedToSanity && (
+                  <span className="flex items-center gap-1 text-[10px] bg-emerald-950/60 border border-emerald-800 text-emerald-400 px-1.5 py-0.5 rounded">
+                    <CheckCircle2 size={11} /> Sanity Synced
+                  </span>
+                )}
+              </div>
               <div className="text-[11px] text-slate-500 mt-0.5">{new Date(h.date).toLocaleString()}</div>
             </div>
             <div className="flex gap-1.5">
               <button onClick={() => onDuplicate(h.id)} className="p-1.5 text-slate-500 hover:text-cyan-400" title="Duplicate"><Copy size={14} /></button>
-              <button onClick={() => onDelete(h.id)} className="p-1.5 text-slate-500 hover:text-red-400" title="Delete"><Trash2 size={14} /></button>
+              <button onClick={() => onDelete(h.id, h.sanityId)} className="p-1.5 text-slate-500 hover:text-red-400" title="Delete"><Trash2 size={14} /></button>
             </div>
           </div>
         ))}
@@ -1352,7 +1377,27 @@ function HistoryPage({ history, onDelete, onClear, onRename, onDuplicate }) {
 function SettingsPage({ theme, setTheme }) {
   return (
     <div className="space-y-5">
-      <CalcHeader title="Settings" desc="Application preferences." />
+      <CalcHeader title="Settings" desc="Application preferences and Sanity CMS configuration." />
+      <Panel title="Sanity CMS Cloud Connection">
+        <div className="space-y-2 text-xs">
+          <div className="flex justify-between items-center py-1 border-b border-slate-800">
+            <span className="text-slate-400">Sanity Organization</span>
+            <span className="font-mono text-slate-200">oxTC2CKFD</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-800">
+            <span className="text-slate-400">Sanity Project ID</span>
+            <span className="font-mono text-cyan-400">{SANITY_CONFIG.projectId}</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-800">
+            <span className="text-slate-400">Dataset</span>
+            <span className="font-mono text-slate-200">{SANITY_CONFIG.dataset}</span>
+          </div>
+          <div className="flex justify-between items-center py-1">
+            <span className="text-slate-400">API Version</span>
+            <span className="font-mono text-slate-200">{SANITY_CONFIG.apiVersion}</span>
+          </div>
+        </div>
+      </Panel>
       <Panel title="Appearance">
         <SegButton value={theme} onChange={setTheme} options={[{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }, { value: "system", label: "System" }]} />
       </Panel>
@@ -1370,8 +1415,7 @@ function AboutPage() {
       <Panel>
         <p className="text-sm text-slate-400 leading-relaxed">
           ShipNav provides calculation and educational aids for common navigation, ship-handling, tidal, and collision-avoidance tasks.
-          It is designed to support — not replace — official nautical charts, Sailing Directions, Admiralty publications, ECDIS, radar,
-          GNSS, COLREGS, official tide tables, and the Master's / OOW's professional judgement.
+          It is integrated with Sanity CMS Cloud (Project <code className="text-cyan-400">a4ru0yl4</code>) for persistent cloud synchronization.
         </p>
       </Panel>
       <Warning level="caution">All results are estimates based on the simplified formulas documented within each calculator's "Formula & Method" panel. Verify critical decisions against official sources and bridge procedures.</Warning>
@@ -1409,10 +1453,37 @@ export default function ShipNavApp() {
   const [theme, setTheme] = useState("dark");
   const idRef = useRef(0);
 
-  const saveCalc = (name, inputs, results) => {
+  useEffect(() => {
+    fetchSanityCalculations().then((sanityCalcs) => {
+      if (sanityCalcs && sanityCalcs.length > 0) {
+        setHistory((prev) => {
+          const existingIds = new Set(prev.map((p) => p.sanityId || p.id));
+          const newCalcs = sanityCalcs.filter((sc) => !existingIds.has(sc.sanityId));
+          return [...newCalcs, ...prev];
+        });
+      }
+    });
+  }, []);
+
+  const saveCalc = async (name, inputs, results) => {
     idRef.current += 1;
-    setHistory((h) => [{ id: idRef.current, name, inputs, results, date: Date.now() }, ...h]);
+    const localId = idRef.current;
+    const newEntry = { id: localId, name, inputs, results, date: Date.now(), syncedToSanity: false };
+    setHistory((h) => [newEntry, ...h]);
+
+    const sanityId = await saveToSanity(name, "nautical", inputs, results);
+    if (sanityId) {
+      setHistory((h) => h.map((item) => item.id === localId ? { ...item, sanityId, syncedToSanity: true } : item));
+    }
   };
+
+  const deleteCalc = async (id, sanityId) => {
+    setHistory((h) => h.filter((x) => x.id !== id));
+    if (sanityId) {
+      await deleteFromSanity(sanityId);
+    }
+  };
+
 
   const navigate = (id) => { setPage(id); setSidebarOpen(false); };
 
@@ -1449,7 +1520,7 @@ export default function ShipNavApp() {
         "Be alert to jamming/spoofing risk in certain areas; maintain traditional fixing skills as a backup.",
       ]} />;
       case "history": return <HistoryPage history={history}
-        onDelete={(id) => setHistory((h) => h.filter((x) => x.id !== id))}
+        onDelete={(id, sanityId) => deleteCalc(id, sanityId)}
         onClear={() => setHistory([])}
         onRename={(id, name) => setHistory((h) => h.map((x) => x.id === id ? { ...x, name } : x))}
         onDuplicate={(id) => setHistory((h) => { const item = h.find((x) => x.id === id); return item ? [{ ...item, id: Date.now() }, ...h] : h; })}
