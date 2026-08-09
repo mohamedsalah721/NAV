@@ -7,6 +7,7 @@ import {
   Lightbulb, Users, Crosshair, Cloud, Database
 } from "lucide-react";
 import { SANITY_CONFIG, fetchSanityCalculations, saveToSanity, deleteFromSanity } from "./sanity/client";
+import SanityStudioView from "./SanityStudio";
 
 
 
@@ -1437,12 +1438,16 @@ const SIDEBAR = [
   { id: "ais", label: "AIS", icon: Satellite },
   { id: "gnss", label: "GNSS", icon: LocateFixed },
   { id: "converter", label: "Conversions", icon: Ruler },
+  { id: "sanity-studio", label: "Sanity Studio", icon: Database },
   { id: "history", label: "Saved Calculations", icon: Save },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "about", label: "About", icon: Info },
 ];
 
-const PAGE_TITLES = Object.fromEntries(CALCULATORS.map((c) => [c.id, c.label]));
+const PAGE_TITLES = {
+  ...Object.fromEntries(CALCULATORS.map((c) => [c.id, c.label])),
+  "sanity-studio": "Sanity Studio CMS",
+};
 
 export default function ShipNavApp() {
   const [page, setPage] = useState("dashboard");
@@ -1507,6 +1512,7 @@ export default function ShipNavApp() {
       case "coordinates": return <CoordinatesCalc onSave={saveCalc} />;
       case "compass": return <CompassCalc onSave={saveCalc} />;
       case "converter": return <ConverterCalc onSave={saveCalc} />;
+      case "sanity-studio": return <SanityStudioView />;
       case "ais": return <InfoStub title="AIS Reference" desc="Automatic Identification System — quick reference." points={[
         "Class A: mandatory for SOLAS vessels; broadcasts position, course, speed, MMSI, and voyage data.",
         "Class B: lower-power AIS typically fitted to smaller/leisure craft.",
