@@ -4,15 +4,23 @@ export const SANITY_CONFIG = {
   projectId: import.meta.env.VITE_SANITY_PROJECT_ID || "a4ru0yl4",
   dataset: import.meta.env.VITE_SANITY_DATASET || "production",
   apiVersion: import.meta.env.VITE_SANITY_API_VERSION || "2024-01-01",
-  useCdn: true,
   token: import.meta.env.VITE_SANITY_WRITE_TOKEN || "",
 };
 
+// Read client (CDN, no auth needed for public reads)
+export const sanityReadClient = createClient({
+  projectId: SANITY_CONFIG.projectId,
+  dataset: SANITY_CONFIG.dataset,
+  apiVersion: SANITY_CONFIG.apiVersion,
+  useCdn: true,
+});
+
+// Write client (uses Editor token for mutations)
 export const sanityClient = createClient({
   projectId: SANITY_CONFIG.projectId,
   dataset: SANITY_CONFIG.dataset,
   apiVersion: SANITY_CONFIG.apiVersion,
-  useCdn: SANITY_CONFIG.useCdn,
+  useCdn: false,
   token: SANITY_CONFIG.token,
 });
 
@@ -30,7 +38,7 @@ export async function fetchSanityCalculations() {
       createdAt,
       _createdAt
     }`;
-    const docs = await sanityClient.fetch(query);
+    const docs = await sanityReadClient.fetch(query);
     return docs.map((doc) => ({
       id: doc._id,
       sanityId: doc._id,
@@ -42,7 +50,7 @@ export async function fetchSanityCalculations() {
       syncedToSanity: true,
     }));
   } catch (err) {
-    console.warn("Sanity fetch warning (falling back to local storage):", err.message);
+    console.warn("Sanity fetch warning (falling back to local):", err.message);
     return null;
   }
 }
@@ -52,7 +60,7 @@ export async function fetchSanityCalculations() {
  */
 export async function saveToSanity(name, calculatorType, inputs, results) {
   if (!SANITY_CONFIG.token) {
-    console.info("Sanity read-only mode active (add VITE_SANITY_WRITE_TOKEN for remote mutation).");
+    console.info("No write token — skipping Sanity sync.");
     return null;
   }
   try {
@@ -82,6 +90,20 @@ export async function deleteFromSanity(sanityId) {
     return true;
   } catch (err) {
     console.error("Sanity delete error:", err.message);
+    return false;
+  }
+}
+
+/**
+ * Rename/patch a calculation document in Sanity CMS
+ */
+export async function renameInSanity(sanityId, newName) {
+  if (!SANITY_CONFIG.token || !sanityId) return false;
+  try {
+    await sanityClient.patch(sanityId).set({ name: newName }).commit();
+    return true;
+  } catch (err) {
+    console.error("Sanity rename error:", err.message);
     return false;
   }
 }

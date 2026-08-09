@@ -13,6 +13,9 @@ dist-isolation
 .DS_Store
 *.local
 
+# Environment variables (contains secrets — never commit)
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

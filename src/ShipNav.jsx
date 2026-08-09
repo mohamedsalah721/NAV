@@ -6,7 +6,7 @@ import {
   ChevronRight, ArrowRight, Gauge, LocateFixed, CornerDownRight,
   Lightbulb, Users, Crosshair, Cloud, Database
 } from "lucide-react";
-import { SANITY_CONFIG, fetchSanityCalculations, saveToSanity, deleteFromSanity } from "./sanity/client";
+import { SANITY_CONFIG, fetchSanityCalculations, saveToSanity, deleteFromSanity, renameInSanity } from "./sanity/client";
 import SanityStudioView from "./SanityStudio";
 
 
@@ -1528,8 +1528,12 @@ export default function ShipNavApp() {
       case "history": return <HistoryPage history={history}
         onDelete={(id, sanityId) => deleteCalc(id, sanityId)}
         onClear={() => setHistory([])}
-        onRename={(id, name) => setHistory((h) => h.map((x) => x.id === id ? { ...x, name } : x))}
-        onDuplicate={(id) => setHistory((h) => { const item = h.find((x) => x.id === id); return item ? [{ ...item, id: Date.now() }, ...h] : h; })}
+        onRename={(id, name) => {
+          setHistory((h) => h.map((x) => x.id === id ? { ...x, name } : x));
+          const item = history.find((x) => x.id === id);
+          if (item?.sanityId) renameInSanity(item.sanityId, name);
+        }}
+        onDuplicate={(id) => setHistory((h) => { const item = h.find((x) => x.id === id); return item ? [{ ...item, id: Date.now(), sanityId: null, syncedToSanity: false }, ...h] : h; })}
       />;
       case "settings": return <SettingsPage theme={theme} setTheme={setTheme} />;
       case "about": return <AboutPage />;
